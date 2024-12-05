@@ -1,27 +1,24 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import {ISignatureTransfer} from "./interfaces/INFTSignatureTransfer.sol";
+import {INFTSignatureTransfer} from "./interfaces/INFTSignatureTransfer.sol";
 import {SignatureExpired, InvalidNonce} from "./PermitErrors.sol";
-import {ERC20} from "solmate/src/tokens/ERC20.sol";
-import "@openzeppelin/contracts/tokens/ERC20/ERC20.sol";
+import {ERC721} from "solmate/src/tokens/ERC721.sol";
 import {SafeTransferLib} from "solmate/src/utils/SafeTransferLib.sol";
 import {SignatureVerification} from "./lib/SignatureVerification.sol";
-import {PermitHash} from "./libraries/PermitHash.sol";
+import {PermitHash} from "./lib/PermitHash.sol";
 import {EIP712} from "./EIP712.sol";
 
-contract SignatureTransfer is ISignatureTransfer, EIP712 {
+contract NFTSignatureTransfer is INFTSignatureTransfer, EIP712 {
     using SignatureVerification for bytes;
-    using SafeTransferLib for ERC20;
+    using SafeTransferLib for ERC721;
     using PermitHash for PermitTransferFrom;
     using PermitHash for PermitBatchTransferFrom;
 
-    /// @inheritdoc ISignatureTransfer
+    /// @inheritdoc INFTSignatureTransfer
     mapping(address => mapping(uint256 => uint256)) public nonceBitmap;
 
-    constructor() EIP712("NFTSignatureTransfer", "1") {}
-
-    /// @inheritdoc ISignatureTransfer
+    /// @inheritdoc INFTSignatureTransfer
     function permitTransferFrom(
         PermitTransferFrom memory permit,
         SignatureTransferDetails calldata transferDetails,
@@ -33,24 +30,6 @@ contract SignatureTransfer is ISignatureTransfer, EIP712 {
             transferDetails,
             owner,
             permit.hash(),
-            signature
-        );
-    }
-
-    /// @inheritdoc ISignatureTransfer
-    function permitWitnessTransferFrom(
-        PermitTransferFrom memory permit,
-        SignatureTransferDetails calldata transferDetails,
-        address owner,
-        bytes32 witness,
-        string calldata witnessTypeString,
-        bytes calldata signature
-    ) external {
-        _permitTransferFrom(
-            permit,
-            transferDetails,
-            owner,
-            permit.hashWithWitness(witness, witnessTypeString),
             signature
         );
     }
@@ -72,21 +51,21 @@ contract SignatureTransfer is ISignatureTransfer, EIP712 {
 
         if (block.timestamp > permit.deadline)
             revert SignatureExpired(permit.deadline);
-        if (requestedAmount > permit.permitted.amount)
-            revert InvalidAmount(permit.permitted.amount);
+        if (requestedAmount != permit.permitted.tokenId)
+            revert InvalidAmount(permit.permitted.tokenId);
 
         _useUnorderedNonce(owner, permit.nonce);
 
         signature.verify(_hashTypedData(dataHash), owner);
 
-        ERC20(permit.permitted.token).safeTransferFrom(
+        ERC721(permit.permitted.token).safeTransferFrom(
             owner,
             transferDetails.to,
             requestedAmount
         );
     }
 
-    /// @inheritdoc ISignatureTransfer
+    /// @inheritdoc INFTSignatureTransfer
     function permitTransferFrom(
         PermitBatchTransferFrom memory permit,
         SignatureTransferDetails[] calldata transferDetails,
@@ -98,24 +77,6 @@ contract SignatureTransfer is ISignatureTransfer, EIP712 {
             transferDetails,
             owner,
             permit.hash(),
-            signature
-        );
-    }
-
-    /// @inheritdoc ISignatureTransfer
-    function permitWitnessTransferFrom(
-        PermitBatchTransferFrom memory permit,
-        SignatureTransferDetails[] calldata transferDetails,
-        address owner,
-        bytes32 witness,
-        string calldata witnessTypeString,
-        bytes calldata signature
-    ) external {
-        _permitTransferFrom(
-            permit,
-            transferDetails,
-            owner,
-            permit.hashWithWitness(witness, witnessTypeString),
             signature
         );
     }
@@ -146,12 +107,12 @@ contract SignatureTransfer is ISignatureTransfer, EIP712 {
                 TokenPermissions memory permitted = permit.permitted[i];
                 uint256 requestedAmount = transferDetails[i].requestedAmount;
 
-                if (requestedAmount > permitted.amount)
-                    revert InvalidAmount(permitted.amount);
+                if (requestedAmount != permitted.tokenId)
+                    revert InvalidAmount(permitted.tokenId);
 
                 if (requestedAmount != 0) {
                     // allow spender to specify which of the permitted tokens should be transferred
-                    ERC20(permitted.token).safeTransferFrom(
+                    ERC721(permitted.token).safeTransferFrom(
                         owner,
                         transferDetails[i].to,
                         requestedAmount
@@ -161,7 +122,7 @@ contract SignatureTransfer is ISignatureTransfer, EIP712 {
         }
     }
 
-    /// @inheritdoc ISignatureTransfer
+    /// @inheritdoc INFTSignatureTransfer
     function invalidateUnorderedNonces(uint256 wordPos, uint256 mask) external {
         nonceBitmap[msg.sender][wordPos] |= mask;
 
