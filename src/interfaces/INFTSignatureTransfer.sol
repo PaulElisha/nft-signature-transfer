@@ -26,7 +26,7 @@ interface INFTSignatureTransfer is IEIP712 {
     struct TokenPermissions {
         // ERC721 token address
         address token;
-        // the maximum amount that can be spent
+        // the tokenId that can be spent
         uint256 tokenId;
     }
 
